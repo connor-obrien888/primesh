@@ -1,0 +1,16 @@
+pdf.fonttype : 42
+font.family : monospace
+
+axes.labelsize : 14
+
+xtick.labelsize : 14
+xtick.major.width : 1.4
+xtick.minor.width : 1.0
+
+ytick.labelsize : 14
+ytick.major.width : 1.4
+ytick.minor.width : 1.0
+
+legend.fontsize : 14
+legend.frameon : False
+

@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "primesh"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.8,<3.12"
+tensorflow = "2.8.0"
+matplotlib = ">=3.4"
+pandas = ">=1.2"
+scipy = ">=1.6"
+scikit-learn = ">=0.24"
+numpy = "1.20.3"
+protobuf = "3.20.0"
+tables = "^3.8.0"
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.25.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
