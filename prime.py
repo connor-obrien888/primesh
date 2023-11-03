@@ -4,6 +4,7 @@ import tensorflow as tf
 import tensorflow.keras as ks
 import tensorflow.keras.backend as K
 import tensorflow.keras.callbacks as ksc
+import scipy.interpolate as spi
 import joblib
 
 class prime(ks.Model):
@@ -216,21 +217,21 @@ def streamline(axes, frames, x_grid, y_grid, frame_index, param_index, u_index, 
         stream (matplotlib streamplot): Streamplot of velocity/B field
         ax2 (matplotlib axes): Invisible axes overtop of axes containing streamplot
     '''
-    im = axes.imshow(frames[frame_index, :, :, param_index], origin='lower', extent=[y_extent[0], y_extent[1], x_extent[0], x_extent[1]], aspect='auto', cmap=cmap, vmin=vmin, vmax=vmax)
+    im = axes.imshow(frames[frame_index, :, :, param_index], origin='lower', extent=[y_extent[0], y_extent[1], x_extent[0], x_extent[1]], aspect='equal', cmap=cmap, vmin=vmin, vmax=vmax)
+    #axes.set_aspect('equal')
     axes.set_ylim(x_extent[0], x_extent[1])
-    axes.set_xlim(y_extent[0], y_extent[1])
+    axes.set_xlim(y_extent[1], y_extent[0])
     axes.set_ylabel(r'X GSE ($R_{E}$)', fontsize = 16)
     axes.set_xlabel(r'Y GSE ($R_{E}$)', fontsize = 16)
     axes.spines['top'].set_visible(False)
     axes.spines['right'].set_visible(False)
     axes.spines['bottom'].set_visible(False)
     axes.spines['left'].set_visible(False)
-    axes.set_aspect('equal')
 
     #Create new invisible axes overtop of axes
     ax2 = axes.twinx()
     ax2.set_ylim(x_extent[0], x_extent[1])
-    ax2.set_xlim(y_extent[0], y_extent[1])
+    ax2.set_xlim(y_extent[1], y_extent[0])
     ax2.set_aspect('equal')
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
@@ -399,7 +400,6 @@ def shue_mp(theta, pdyn, bz):
 def shue_mp_interp(y, pdyn, bz, theta_extent = [-np.pi/2, np.pi/2], gridsize = 0.01):
     '''
     Magnetopause model from Shue et al 1998, interpolated so GSE X can be specified from GSE Y. Assumes GSE Z=0.
-    Requires scipy.interpolate.
 
     Parameters:
         y (float): GSE Y coordinate
@@ -407,7 +407,6 @@ def shue_mp_interp(y, pdyn, bz, theta_extent = [-np.pi/2, np.pi/2], gridsize = 0
         bz (float): IMF Bz (nT)
         theta_extent (list): Polar angle extent of the grid (radians)
     '''
-    import scipy.interpolate as spi
     theta = np.arange(theta_extent[0], theta_extent[1], 0.01)
     r0 = (10.22 + 1.29*np.tanh(0.184*(bz + 8.14)))*(pdyn**(-1/6.6))
     a1 = (0.58 - 0.007*bz) * (1 + 0.024*np.log(pdyn))
