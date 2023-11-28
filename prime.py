@@ -217,7 +217,7 @@ def streamline(axes, frames, x_grid, y_grid, frame_index, param_index, u_index, 
         stream (matplotlib streamplot): Streamplot of velocity/B field
         ax2 (matplotlib axes): Invisible axes overtop of axes containing streamplot
     '''
-    im = axes.imshow(frames[frame_index, :, :, param_index], origin='lower', extent=[y_extent[0], y_extent[1], x_extent[0], x_extent[1]], aspect='equal', cmap=cmap, vmin=vmin, vmax=vmax)
+    im = axes.imshow(frames[frame_index, :, :, param_index], origin='lower', extent=[y_extent[0], y_extent[1], x_extent[0], x_extent[1]], aspect='equal', cmap=cmap, vmin=vmin, vmax=vmax, draw_streamline = True)
     #axes.set_aspect('equal')
     axes.set_ylim(x_extent[0], x_extent[1])
     axes.set_xlim(y_extent[1], y_extent[0])
@@ -238,8 +238,11 @@ def streamline(axes, frames, x_grid, y_grid, frame_index, param_index, u_index, 
     ax2.spines['bottom'].set_visible(False)
     ax2.spines['left'].set_visible(False)
     ax2.set_yticks([])
-    #Draw streamlines  in ax2
-    stream = ax2.streamplot(y_grid, x_grid, frames[frame_index, :, :, v_index], frames[frame_index, :, :, u_index], color='k', density=density, linewidth=1)
+    if draw_streamline:
+        #Draw streamlines  in ax2
+        stream = ax2.streamplot(y_grid, x_grid, frames[frame_index, :, :, v_index], frames[frame_index, :, :, u_index], color='k', density=density, linewidth=1)
+    else:
+        stream = None
     return im, stream, ax2
 
 def colorbar_maker(fig, im, param_index = None, label = None, box = [0.92, 0.55, 0.015, 0.33]):
