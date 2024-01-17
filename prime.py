@@ -194,7 +194,7 @@ class prime(ks.Model):
         return model
 
 #Plotting functions
-def streamline(axes, frames, x_grid, y_grid, frame_index, param_index, u_index, v_index, cmap = 'viridis', x_extent = [0, 20], y_extent = [-35, 35], density = 2, vmin = -50, vmax = 50):
+def streamline(axes, frames, x_grid, y_grid, frame_index, param_index, u_index, v_index, cmap = 'viridis', x_extent = [0, 20], y_extent = [-35, 35], density = 2, vmin = -50, vmax = 50, draw_streamline = True, linecolor = 'k'):
     '''
     Draws heatmap from frames of the magnetosheath parameter specified by param_index at the frame specified by frame_index.
     Draws streamlines of the magnetosheath velocity/B field from frames at the frame specified by frame_index.
@@ -212,12 +212,15 @@ def streamline(axes, frames, x_grid, y_grid, frame_index, param_index, u_index, 
         x_extent (list): Range of x values to draw on
         y_extent (list): Range of y values to draw on
         density (float): Density of streamlines to draw
+        vmin (float): Minimum value of heatmap
+        vmax (float): Maximum value of heatmap
+        draw_streamline (bool): Whether or not to draw streamlines
     Returns:
         im (matplotlib image): Image of heatmap
         stream (matplotlib streamplot): Streamplot of velocity/B field
         ax2 (matplotlib axes): Invisible axes overtop of axes containing streamplot
     '''
-    im = axes.imshow(frames[frame_index, :, :, param_index], origin='lower', extent=[y_extent[0], y_extent[1], x_extent[0], x_extent[1]], aspect='equal', cmap=cmap, vmin=vmin, vmax=vmax, draw_streamline = True)
+    im = axes.imshow(frames[frame_index, :, :, param_index], origin='lower', extent=[y_extent[0], y_extent[1], x_extent[0], x_extent[1]], aspect='equal', cmap=cmap, vmin=vmin, vmax=vmax)
     #axes.set_aspect('equal')
     axes.set_ylim(x_extent[0], x_extent[1])
     axes.set_xlim(y_extent[1], y_extent[0])
@@ -240,7 +243,7 @@ def streamline(axes, frames, x_grid, y_grid, frame_index, param_index, u_index, 
     ax2.set_yticks([])
     if draw_streamline:
         #Draw streamlines  in ax2
-        stream = ax2.streamplot(y_grid, x_grid, frames[frame_index, :, :, v_index], frames[frame_index, :, :, u_index], color='k', density=density, linewidth=1)
+        stream = ax2.streamplot(y_grid, x_grid, frames[frame_index, :, :, v_index], frames[frame_index, :, :, u_index], color=linecolor, density=density, linewidth=1,)
     else:
         stream = None
     return im, stream, ax2
