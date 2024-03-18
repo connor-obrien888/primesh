@@ -16,6 +16,8 @@ scikit-learn = ">=0.24"
 numpy = "1.20.3"
 protobuf = "3.20.0"
 tables = "^3.8.0"
+mshpy = "^0.0.31"
+sympy = "^1.12"
 
 
 [tool.poetry.group.dev.dependencies]

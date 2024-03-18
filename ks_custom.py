@@ -532,11 +532,12 @@ def mse_metric(y_true, y_pred):
     return mse
 
 class dataset():
-    def __init__(self, tar_full, in_full, tar_scaler, in_scaler, tar_train, in_train, tar_test, in_test, inds_train, inds_test, ds_mask, in_keys, tar_keys):
+    def __init__(self, tar_full, in_full, tar_scaler, in_scaler, loc_scaler, tar_train, in_train, tar_test, in_test, inds_train, inds_test, ds_mask, in_keys, tar_keys):
         self.tar_full = tar_full
         self.in_full = in_full
         self.tar_scaler = tar_scaler
         self.in_scaler = in_scaler
+        self.loc_scaler = loc_scaler
         self.tar_train = tar_train
         self.in_train = in_train
         self.tar_test = tar_test
@@ -568,7 +569,7 @@ class dataset():
         return in_data, tar_data
 
 
-def load_dataset(mms_store, wind_store, region, in_keys, tar_keys, split_frac, window, stride, inter_frac, flag, in_storekey = 'inputs', tar_storekey = 'targets', conesize = np.pi/2, tar_scaler = RobustScaler(), in_scaler = RobustScaler(), vx_cut = True, table_cut = False):
+def load_dataset(mms_store, wind_store, region, in_keys, tar_keys, split_frac, window, stride, inter_frac, flag, in_storekey = 'inputs', tar_storekey = 'targets', conesize = np.pi/2, tar_scaler = RobustScaler(), in_scaler = RobustScaler(), vx_cut = True, table_cut = False, chunksize = 4):
     '''
     Helper function that loads a dataset from a file.
     '''
@@ -591,11 +592,11 @@ def load_dataset(mms_store, wind_store, region, in_keys, tar_keys, split_frac, w
         tar_raw = tar_raw.dropna() #The entire dataset
     in_raw = pd.read_hdf(wind_store, key = in_storekey, mode = 'a') #Load the input data
     in_ind = closest_argmin(tar_raw['Epoch'].to_numpy(), in_raw['Epoch'].to_numpy()) #Get the indices of the input dataset closest to each target time
-    tar_full, in_full, tar_scaler, in_scaler, ds_mask = ds_constructor(tar_raw, in_raw, in_ind, in_keys, tar_keys, window = window, stride = stride, inter_thresh = inter_frac, tar_scaler = tar_scaler, in_scaler = in_scaler, return_mask = True, flag = flag) #Scale, stride, window the datasets
-    in_train, in_test = chunker(in_full, window*4, split_frac) #Divide the input datasets into independent chunks
-    tar_train, tar_test= chunker(tar_full, window*4, split_frac) #Divide the target datasets into independent chunks, save indices so we can do comparison/validation
-    inds_train, inds_test = chunker(np.arange(len(tar_full)), window*4, split_frac)
-    return dataset(tar_full, in_full, tar_scaler, in_scaler, tar_train, in_train, tar_test, in_test, inds_train, inds_test, ds_mask, in_keys, tar_keys)
+    tar_full, in_full, tar_scaler, in_scaler, loc_scaler, ds_mask = ds_constructor(tar_raw, in_raw, in_ind, in_keys, tar_keys, window = window, stride = stride, inter_thresh = inter_frac, tar_scaler = tar_scaler, in_scaler = in_scaler, return_mask = True, flag = flag) #Scale, stride, window the datasets
+    in_train, in_test = chunker(in_full, window*chunksize, split_frac) #Divide the input datasets into independent chunks
+    tar_train, tar_test= chunker(tar_full, window*chunksize, split_frac) #Divide the target datasets into independent chunks, save indices so we can do comparison/validation
+    inds_train, inds_test = chunker(np.arange(len(tar_full)), window*chunksize, split_frac)
+    return dataset(tar_full, in_full, tar_scaler, in_scaler, loc_scaler, tar_train, in_train, tar_test, in_test, inds_train, inds_test, ds_mask, in_keys, tar_keys)
 
 def nightside_cut(mms_data, conesize = 2, x_key = 'R_xgse', y_key = 'R_ygse', z_key = 'R_zgse'):
     '''
@@ -666,7 +667,7 @@ def input_window(input_data, inds, in_keys, window, stride, flag = 'percent'):
             inter_flags[i] = tdelt_max     
     return in_arr, inter_flags
 
-def ds_constructor(target_data, input_data, inds, in_keys, tar_keys, window = 140, stride = 1, inter_thresh = 0.5, tar_scaler = RobustScaler(), in_scaler = RobustScaler(), night_cut = False, return_mask = False, flag = 'percent'):
+def ds_constructor(target_data, input_data, inds, in_keys, tar_keys, window = 140, stride = 1, inter_thresh = 0.5, tar_scaler = RobustScaler(), in_scaler = RobustScaler(), loc_scaler = RobustScaler(), night_cut = False, return_mask = False, flag = 'percent'):
     '''
     Helper function that constructs keras datasets from target and input Dataframes.
 
@@ -716,27 +717,33 @@ def ds_constructor(target_data, input_data, inds, in_keys, tar_keys, window = 14
     #Copy the DataFrames for safety
     target_data_cp = target_data.copy()
     input_data_cp = input_data.copy()
+
+    #Append 'R_xgse', 'R_ygse', 'R_zgse' to the target keys for scaling, in order to add them to in_arr
+    loc_df = target_data_cp.loc[:, ['R_xgse', 'R_ygse', 'R_zgse']]
     
     #Rescale here
     tar_tf = tar_scaler.fit(target_data_cp.loc[:,tar_keys].to_numpy()) #This rescales data to inter-quartile range to reduce outlier sensitivity
     in_tf = in_scaler.fit(input_data_cp.loc[:,in_keys].to_numpy())
+    loc_tf = loc_scaler.fit(loc_df.to_numpy())
     target_data_cp.loc[:,tar_keys] = tar_tf.transform(target_data_cp.loc[:,tar_keys].to_numpy()) #Look, its pretty annoying that this is the syntax for this operation, but here we are
     input_data_cp.loc[:,in_keys] = in_tf.transform(input_data_cp.loc[:,in_keys].to_numpy())
+    loc_df = loc_tf.transform(loc_df.to_numpy())
     
     #Target array
     tar_arr = target_data_cp.loc[:, tar_keys].to_numpy() #Target array is a subset of the MMS data (just parameters)
     
     #Input Array
     in_arr, inter_flags = input_window(input_data_cp, inds, in_keys, window, stride, flag = flag)
+    in_arr[:,:,11:14] = np.reshape(np.repeat(loc_df, 55, axis = 0), (len(in_arr), 55, 3)) #Add the location data to the input array
     
     mask = (inter_flags < inter_thresh) #Mask out data thats above the inter-thresh
     tar_ds = tar_arr[mask, :] #Only keep points that have a good fraction of real, non-interpolated data
     in_ds = in_arr[mask, :, :]
     
     if return_mask:
-        return tar_ds, in_ds, tar_tf, in_tf, mask
+        return tar_ds, in_ds, tar_tf, in_tf, loc_tf, mask
     else:
-        return tar_ds, in_ds, tar_tf, in_tf
+        return tar_ds, in_ds, tar_tf, in_tf, loc_tf
 
 
 def chunker(A, n, f, return_inds = False):

@@ -8,7 +8,7 @@ import scipy.interpolate as spi
 import joblib
 
 class prime(ks.Model):
-    def __init__(self, model = None, in_scaler = None, tar_scaler = None, in_keys = None, tar_keys = None, out_keys = None, hps = [55, 16, 0.05]):
+    def __init__(self, model = None, in_scaler = None, tar_scaler = None, loc_scaler = None, in_keys = None, tar_keys = None, out_keys = None, hps = [55, 16, 0.05]):
         '''
         Class to wrap a keras model to be used with the SH dataset.
 
@@ -16,6 +16,7 @@ class prime(ks.Model):
             model (keras model): Keras model to be used for prediction
             in_scaler (sklearn scaler): Scaler to be used for input data
             tar_scaler (sklearn scaler): Scaler to be used for target data
+            loc_scaler (sklearn scaler): Scaler to be used for location data
         '''
         super(prime, self).__init__()
         if model is None:
@@ -32,6 +33,10 @@ class prime(ks.Model):
             self.tar_scaler = joblib.load('tar_scaler.pkl')
         else:
             self.tar_scaler = tar_scaler
+        if loc_scaler is None:
+            self.loc_scaler = joblib.load('loc_scaler.pkl')
+        else:
+            self.loc_scaler = loc_scaler
         if in_keys is None:
             self.in_keys = ['B_xgsm', 'B_ygsm', 'B_zgsm', 'Vi_xgse', 'Vi_ygse', 'Vi_zgse', 'Ni', 'Vth', 'R_xgse', 'R_ygse', 'R_zgse', 'target_R_xgse', 'target_R_ygse', 'target_R_zgse'] #Wind data keys to include in input dataset
         else:
@@ -79,14 +84,13 @@ class prime(ks.Model):
         output[:, ::2] = self.tar_scaler.inverse_transform(output_unscaled[:, ::2]) #Mean values
         output[:, 1::2] = np.abs(self.tar_scaler.inverse_transform(output_unscaled[:, ::2] + output_unscaled[:, 1::2]) - self.tar_scaler.inverse_transform(output_unscaled[:, ::2])) #Standard deviations
         return output
-    def predict_grid(self, gridsize, x_extent, y_extent, framenum, bx, by, bz, vx, vy, vz, ni, vt, rx, ry, rz, loc_mask = False):
+    def predict_grid(self, gridsize, x_extent, framenum, bx, by, bz, vx, vy, vz, ni, vt, rx, ry, rz, y_extent = None, z_extent = None, loc_mask = False, subtract_ecliptic = False):
         '''
         Generate predictions from prime model on a grid of points.
 
         Parameters:
             gridsize (float): Spacing of grid points
             x_extent (list): Range of x values to calculate on
-            y_extent (list): Range of y values to calculate on
             framenum (int): Number of frames to calculate
             bx (float, array-like): IMF Bx value. If array like, must be of length framenum.
             by (float, array-like): IMF By value. If array like, must be of length framenum.
@@ -99,12 +103,22 @@ class prime(ks.Model):
             rx (float, array-like): Wind spacecraft position x value. If array like, must be of length framenum.
             ry (float, array-like): Wind spacecraft position y value. If array like, must be of length framenum.
             rz (float, array-like): Wind spacecraft position z value. If array like, must be of length framenum.
+            y_extent (list): Range of y values to calculate on. If None, z_extent must be specified.
+            z_extent (list): Range of z values to calculate on. If None, y_extent must be specified.
             loc_mask (bool): Whether or not to mask the output to just select the region between the bow shock and magnetopause (Shue et al 1998 and Jelinek et al 2012).
+            subtract_ecliptic (bool): Whether or not to subtract the Earth's motion in the ecliptic from Vy
         Returns:
             output_grid (ndarray): Array of predicted values on the grid. Shape (framenum, x_extent/gridsize, y_extent/gridsize, 18)
         '''
         x_arr = np.arange(x_extent[0], x_extent[1], gridsize) #Create a grid to calculate the magnetosheath conditions on
-        y_arr = np.arange(y_extent[0], y_extent[1], gridsize) #Create a grid to calculate the magnetosheath conditions on
+        if y_extent is None and z_extent is None:
+            raise ValueError('Must specify either y_extent or z_extent')
+        if y_extent is not None and z_extent is not None:
+            raise ValueError('Cannot specify both y_extent and z_extent')
+        if y_extent is not None:
+            y_arr = np.arange(y_extent[0], y_extent[1], gridsize) #Create a grid to calculate the magnetosheath conditions on
+        if z_extent is not None:
+            y_arr = np.arange(z_extent[0], z_extent[1], gridsize) #Create a grid to calculate the magnetosheath conditions on (called y but contains z because im lazy)
         x_grid, y_grid = np.meshgrid(x_arr, y_arr) #Create a grid to calculate the magnetosheath conditions on
         input_seed = np.zeros((len(x_grid.flatten())*framenum, len(self.in_keys))) #Initialize array to hold the input data before unfolding it
         for idx, element in enumerate([bx, by, bz, vx, vy, vz, ni, vt, rx, ry, rz]): #Loop through the input data and repeat it
@@ -113,10 +127,16 @@ class prime(ks.Model):
                 input_seed[:, idx] = np.repeat(element, len(x_grid.flatten())) #If it is, repeat it for each grid point
             except TypeError: #This error throws if iter(element) fails (i.e. element is not iterable)
                 input_seed[:, idx] = np.repeat(element, framenum*len(x_grid.flatten())) #If it isn't, repeat it for each grid point *and frame*
-        input_seed[:, 11] = np.tile(x_grid.flatten(), framenum)
-        input_seed[:, 12] = np.tile(y_grid.flatten(), framenum)
-        input_seed[:, 13] = 0 #Set target z to 0
+        loc_arr = np.zeros((len(x_grid.flatten())*framenum, 3)) #Initialize array to hold the location data
+        loc_arr[:, 0] = np.tile(x_grid.flatten(), framenum)
+        if y_extent is not None:
+            loc_arr[:, 1] = np.tile(y_grid.flatten(), framenum)
+            loc_arr[:, 2] = 0 #Set target z to 0
+        if z_extent is not None:
+            loc_arr[:, 2] = np.tile(y_grid.flatten(), framenum)
+            loc_arr[:, 1] = 0 #Set target y to 0
         input_seed_scaled = self.in_scaler.transform(input_seed) #Scale the input data
+        input_seed_scaled[:,11:14] = self.loc_scaler.transform(loc_arr) #Scale the location data
         input_seed_scaled = np.repeat(input_seed_scaled, self.window, axis = 0) #Repeat the input data 55 times to make static timeseries
         input_arr = input_seed_scaled.reshape(len(x_grid.flatten())*framenum, self.window, len(self.in_keys)) #Reshape the input data into the correct shape
         output_arr = self.model.predict(input_arr) #Predict the output data
@@ -145,6 +165,8 @@ class prime(ks.Model):
                             output_mask[i,idx,idy,:] = True
             #Make a masked version of the output grid
             output_grid = np.ma.masked_array(output_grid, mask=output_mask)
+        if subtract_ecliptic: #If subtract_ecliptic is true, subtract the Earth's motion in the ecliptic from Vy
+            output_grid[:,:,:,8] -= 29.8
         return output_grid
     def load_weights(self, modelpath, scalerpath):
         '''
@@ -194,7 +216,7 @@ class prime(ks.Model):
         return model
 
 #Plotting functions
-def streamline(axes, frames, x_grid, y_grid, frame_index, param_index, u_index, v_index, cmap = 'viridis', x_extent = [0, 20], y_extent = [-35, 35], density = 2, vmin = -50, vmax = 50, draw_streamline = True, linecolor = 'k'):
+def streamline(axes, frames, x_grid, y_grid, frame_index = None, param_index = None, u_index = None, v_index = None, data = None, cmap = 'viridis', x_extent = [0, 20], y_extent = [-35, 35], density = 2, vmin = -50, vmax = 50, draw_streamline = True, linecolor = 'k'):
     '''
     Draws heatmap from frames of the magnetosheath parameter specified by param_index at the frame specified by frame_index.
     Draws streamlines of the magnetosheath velocity/B field from frames at the frame specified by frame_index.
@@ -220,8 +242,10 @@ def streamline(axes, frames, x_grid, y_grid, frame_index, param_index, u_index, 
         stream (matplotlib streamplot): Streamplot of velocity/B field
         ax2 (matplotlib axes): Invisible axes overtop of axes containing streamplot
     '''
-    im = axes.imshow(frames[frame_index, :, :, param_index], origin='lower', extent=[y_extent[0], y_extent[1], x_extent[0], x_extent[1]], aspect='equal', cmap=cmap, vmin=vmin, vmax=vmax)
-    #axes.set_aspect('equal')
+    if data is not None:
+        im = axes.imshow(data, origin='lower', extent=[y_extent[0], y_extent[1], x_extent[0], x_extent[1]], aspect='equal', cmap=cmap, vmin=vmin, vmax=vmax)
+    else:
+        im = axes.imshow(frames[frame_index, :, :, param_index], origin='lower', extent=[y_extent[0], y_extent[1], x_extent[0], x_extent[1]], aspect='equal', cmap=cmap, vmin=vmin, vmax=vmax)
     axes.set_ylim(x_extent[0], x_extent[1])
     axes.set_xlim(y_extent[1], y_extent[0])
     axes.set_ylabel(r'X GSE ($R_{E}$)', fontsize = 16)
