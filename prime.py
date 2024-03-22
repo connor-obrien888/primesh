@@ -190,7 +190,7 @@ class prime(ks.Model):
         self.model.save_weights(modelpath)
         joblib.dump(self.in_scaler, scalerpath + 'in_scaler.pkl')
         joblib.dump(self.tar_scaler, scalerpath + 'tar_scaler.pkl')
-    def build_model(self, units = [544, 224, 64, 80], activation = 'elu', dropout = 0.35, lr = 1e-4):
+    def build_model(self, units = [416, 352, 32, 64], activation = 'elu', dropout = 0.35, lr = 1e-4):
         '''
         Function to build keras model
 
