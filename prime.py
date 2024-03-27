@@ -2,13 +2,11 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import tensorflow.keras as ks
-import tensorflow.keras.backend as K
-import tensorflow.keras.callbacks as ksc
 import scipy.interpolate as spi
 import joblib
 
 class prime(ks.Model):
-    def __init__(self, model = None, in_scaler = None, tar_scaler = None, loc_scaler = None, in_keys = None, tar_keys = None, out_keys = None, hps = [55, 16, 0.05]):
+    def __init__(self, model = None, in_scaler = None, tar_scaler = None, loc_scaler = None, in_keys = None, tar_keys = None, out_keys = None, hps = [55, 18, 0.05]):
         '''
         Class to wrap a keras model to be used with the SH dataset.
 
@@ -19,12 +17,6 @@ class prime(ks.Model):
             loc_scaler (sklearn scaler): Scaler to be used for location data
         '''
         super(prime, self).__init__()
-        if model is None:
-            self.model = self.build_model()
-            self.model.load_weights('primesh.h5')
-            self.model = model
-        else:
-            self.model = model
         if in_scaler is None:
             self.in_scaler = joblib.load('in_scaler.pkl')
         else:
@@ -52,6 +44,12 @@ class prime(ks.Model):
         self.window = hps[0]
         self.stride = hps[1]
         self.fraction = hps[2]
+        if model is None:
+            model_stage = self.build_model()
+            model_stage.load_weights('primesh.h5')
+            self.model = model_stage
+        else:
+            self.model = model
     def predict(self, input):
         '''
         High-level wrapper function to generate prime predictions from input dataframes.
@@ -209,9 +207,9 @@ class prime(ks.Model):
                                ks.layers.Dense(units=units[3], activation=activation),
                                ks.layers.LayerNormalization(),
                                ks.layers.Dropout(dropout),
-                               ks.layers.Dense(len(self.tar_keys),activation='linear')
+                               ks.layers.Dense(len(self.tar_keys)*2,activation='linear')
                                ])
-        model.compile(optimizer=tf.optimizers.Adamax(learning_rate=lr), loss=ksc.crps_loss)
+        model.compile(optimizer=tf.optimizers.Adamax(learning_rate=lr), loss=crps_loss)
         model.build(input_shape = (1, self.window, len(self.in_keys)))
         return model
 
