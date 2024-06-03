@@ -155,9 +155,7 @@ cython_debug/
 **/*.h5
 
 # All drafts
-drafts/*
-drafts/**/*
-drafts/jgr/*
+**/*.pdf
 
 # All presentations
 presentations/**
