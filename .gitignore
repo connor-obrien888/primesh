@@ -157,6 +157,7 @@ cython_debug/
 # All drafts
 drafts/*
 drafts/**/*
+drafts/jgr/*
 
 # All presentations
 presentations/**
